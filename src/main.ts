@@ -1,7 +1,7 @@
 /* eslint-disable no-new -- Required for notices, as ESLint disallow new operators outside of assignments or comparisons. */
-import { Editor, MarkdownFileInfo, MarkdownView, Notice, Plugin } from 'obsidian';
+import { Editor, MarkdownFileInfo, MarkdownView, Notice, Platform, Plugin } from 'obsidian';
 import css from './css.js';
-import { downloadBlob } from './utils.js';
+import { copyHtmlToClipboard, downloadBlob, saveTextFileToVault } from './utils.js';
 import HtmlRenderer from './HtmlRenderer.js';
 
 const customCss = `
@@ -28,18 +28,10 @@ export default class ExportToHtmlPlugin extends Plugin {
         if (!('data' in view)) return;
 
         const htmlRenderer = new HtmlRenderer(this.app, this);
-        const contentAsHtml = await htmlRenderer.render(view.data);
-
-        const textBlob = new Blob([contentAsHtml], { type: 'text/plain' });
-        const htmlBlob = new Blob([contentAsHtml], { type: 'text/html' });
-
-        const clipboardItem = new ClipboardItem({
-          [textBlob.type]: textBlob,
-          [htmlBlob.type]: htmlBlob,
-        });
+        const { html, text } = await htmlRenderer.render(view.data);
 
         try {
-          await window.navigator.clipboard.write([clipboardItem]);
+          await copyHtmlToClipboard(html, text);
         } catch (err) {
           new Notice(`Content could not be copied to clipboard. [${err instanceof Error ? err.message : 'unknown'}].`);
           return;
@@ -56,7 +48,7 @@ export default class ExportToHtmlPlugin extends Plugin {
         if (!('data' in view)) return;
 
         const htmlRenderer = new HtmlRenderer(this.app, this);
-        const contentAsHtml = await htmlRenderer.render(view.data);
+        const { html } = await htmlRenderer.render(view.data);
 
         const wrappedHtml = `<!doctype html>
   <head>
@@ -69,16 +61,30 @@ export default class ExportToHtmlPlugin extends Plugin {
     </style>
   </head>
   <body class="markdown-body">
-    ${contentAsHtml}
+    ${html}
   </body>
 </html>`;
+
+        const filename = `${view.file?.basename ?? 'markdown'}.html`;
+
+        // Mobile WebViews cannot trigger a browser download, so save the file
+        // inside the vault instead (next to the exported note).
+        if (Platform.isMobileApp) {
+          try {
+            const path = await saveTextFileToVault(this.app, wrappedHtml, filename, view.file?.parent?.path ?? '/');
+            new Notice(`HTML file saved to "${path}".`);
+          } catch (err) {
+            new Notice(`Could not save the HTML file. [${err instanceof Error ? err.message : 'unknown'}].`);
+          }
+          return;
+        }
 
         const blob = new Blob(
           [wrappedHtml],
           { type: 'text/html' }
         );
 
-        downloadBlob(blob, `${view.file?.basename ?? 'markdown'}.html`);
+        downloadBlob(blob, filename);
       }
     });
   }

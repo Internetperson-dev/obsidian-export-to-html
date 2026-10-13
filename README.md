@@ -3,9 +3,11 @@ This [Obsidian](https://obsidian.md) community plugin allows you to export the c
 
 During the export, images will be copied over in base 64 format.
 
+Local resource references (Obsidian's internal `app://` URLs, which embed absolute file paths) are removed from the exported HTML so they cannot leak sensitive information about your machine.
+
 This plugin is a work in progress but it already works great in most cases. Some edge cases with inline image exports will be improved.
 
-Obsidian mobile apps are **not yet supported**.
+This plugin works on both desktop and mobile.
 
 ## Installation
 Follow the steps below to install **Obsidian Export to HTML**.
@@ -18,7 +20,7 @@ Follow the steps below to install **Obsidian Export to HTML**.
 Open the command palette (press <key>CTRL+P</key> if you use a keyboard) and type *Export to HTML*.
 
 - Select *Export to HTML: Copy to clipboard as HTML* to copy your note as HTML in your clipboard. You can then paste it in an email or in a Word document and the style will be kept.
-- Select *Export to HTML: Download as HTML* to download your note as an HTML file.
+- Select *Export to HTML: Download as HTML* to download your note as an HTML file. On mobile, browser downloads are not available, so the file is saved inside your vault next to the note instead.
 
 ## Manual installation
 - Download [the latest release](https://github.com/kalvn/obsidian-export-to-html/releases) and unzip it.

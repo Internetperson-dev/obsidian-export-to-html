@@ -44,7 +44,28 @@ export default class HtmlRenderer {
     return `data:image/png;base64,${arrayBufferToBase64(buffer)}`;
   }
 
-  async render (markdownContent: string): Promise<string> {
+  /**
+   * Removes every attribute referencing Obsidian's internal `app://` protocol.
+   *
+   * Those URLs embed the user's absolute local file paths (and a timestamp),
+   * which would leak sensitive data about the machine when the HTML is shared.
+   * This covers media embeds (`<video>`, `<audio>`, `<source>`, ...), internal
+   * links and any `data-*` attribute the Markdown renderer may add.
+   * @param el The root element of the rendered Markdown.
+   */
+  private stripAppProtocolUrls (el: HTMLElement): void {
+    const elements: Element[] = [el, ...Array.from(el.querySelectorAll('*'))];
+
+    for (const element of elements) {
+      for (const attribute of Array.from(element.attributes)) {
+        if (attribute.value.includes('app://')) {
+          element.removeAttribute(attribute.name);
+        }
+      }
+    }
+  }
+
+  async render (markdownContent: string): Promise<{ html: string; text: string }> {
     const el = activeDocument.body.createDiv();
     await MarkdownRenderer.render(this.app, markdownContent, el, '.', this.component);
 
@@ -53,13 +74,28 @@ export default class HtmlRenderer {
       e.remove();
     });
 
-    // Convert images to base 64 strings.
-    el.querySelectorAll('img').forEach(async (img): Promise<void> => {
-      const src = img.src;
-      if (src !== null && src !== undefined) {
-        img.src = await this.convertImageToBase64String(src);
+    // Convert internal images to base 64 strings. External (http/https) and
+    // already inlined (data:) images are left untouched.
+    for (const img of Array.from(el.querySelectorAll('img'))) {
+      const attributeSrc = img.getAttribute('src');
+      if (attributeSrc === null) continue;
+
+      // The renderer may output either an absolute `app://` URL or a relative
+      // path that resolves against Obsidian's internal protocol.
+      const src = attributeSrc.startsWith('app://') ? attributeSrc : img.src;
+      if (!src.startsWith('app://')) continue;
+
+      const base64 = await this.convertImageToBase64String(src);
+      if (base64 !== '') {
+        img.src = base64;
+      } else {
+        // Do not leave the original local resource URL behind.
+        img.removeAttribute('src');
       }
-    });
+    }
+
+    // Strip any remaining reference to local resources to avoid leaking paths.
+    this.stripAppProtocolUrls(el);
 
     /**
      * Wait some time to let the browser finish the painting flow.
@@ -71,6 +107,12 @@ export default class HtmlRenderer {
       }, 100);
     });
 
-    return el.innerHTML;
+    const html = el.innerHTML;
+    const text = el.innerText;
+
+    // Remove the temporary element once its content has been captured.
+    el.remove();
+
+    return { html, text };
   }
 }
