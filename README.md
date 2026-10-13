@@ -1,13 +1,21 @@
 # Export to HTML for Obsidian
 This [Obsidian](https://obsidian.md) community plugin allows you to export the content of a note as HTML, either to the clipboard or to a new HTML file.
 
-During the export, images will be copied over in base 64 format.
+During the export, images and videos are copied over in base 64 format, so the resulting HTML file is self-contained.
 
 Local resource references (Obsidian's internal `app://` URLs, which embed absolute file paths) are removed from the exported HTML so they cannot leak sensitive information about your machine.
 
 This plugin is a work in progress but it already works great in most cases. Some edge cases with inline image exports will be improved.
 
-This plugin works on both desktop and mobile.
+This plugin works on both desktop and mobile. The optional media conversions described below rely on the system `ffmpeg` (and `avifenc`) binaries, so they are only available on desktop. On mobile, images and videos are inlined as-is.
+
+## Media optimization
+The plugin can optimize the exported media (all of this is configurable in the plugin settings):
+
+- **AVIF images** — embedded images are re-encoded to AVIF when `avifenc` (preferred) or `ffmpeg` is available. The original image is kept whenever the AVIF version is not smaller.
+- **AV1 / H.264 videos** — embedded videos are transcoded with `ffmpeg` and inlined. The codec is chosen from the browser's codec support flags (AV1 when supported, H.264 otherwise), or forced to AV1, H.264, or both.
+- **Lazy-loaded YouTube embeds** — YouTube iframes are replaced with a click-to-play thumbnail so the player is only loaded once the thumbnail is clicked (in the downloaded HTML file).
+- Videos larger than the configured size limit are left out of the export.
 
 ## Installation
 Follow the steps below to install **Obsidian Export to HTML**.

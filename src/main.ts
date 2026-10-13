@@ -3,6 +3,8 @@ import { Editor, MarkdownFileInfo, MarkdownView, Notice, Platform, Plugin } from
 import css from './css.js';
 import { copyHtmlToClipboard, downloadBlob, saveTextFileToVault } from './utils.js';
 import HtmlRenderer from './HtmlRenderer.js';
+import { DEFAULT_SETTINGS, ExportToHtmlSettingTab, type ExportToHtmlSettings } from './settings.js';
+import { YOUTUBE_LAZY_LOAD_SCRIPT } from './youtube.js';
 
 const customCss = `
 .markdown-body {
@@ -20,7 +22,13 @@ const customCss = `
 }`;
 
 export default class ExportToHtmlPlugin extends Plugin {
+  settings: ExportToHtmlSettings = DEFAULT_SETTINGS;
+
   async onload () {
+    await this.loadSettings();
+
+    this.addSettingTab(new ExportToHtmlSettingTab(this.app, this));
+
     this.addCommand({
       id: 'copy-to-clipboard-as-html',
       name: 'Copy to clipboard as HTML',
@@ -28,7 +36,10 @@ export default class ExportToHtmlPlugin extends Plugin {
         if (!('data' in view)) return;
 
         const htmlRenderer = new HtmlRenderer(this.app, this);
-        const { html, text } = await htmlRenderer.render(view.data);
+        const { html, text } = await htmlRenderer.render(view.data, {
+          sourcePath: view.file?.path ?? '/',
+          settings: this.settings,
+        });
 
         try {
           await copyHtmlToClipboard(html, text);
@@ -48,23 +59,12 @@ export default class ExportToHtmlPlugin extends Plugin {
         if (!('data' in view)) return;
 
         const htmlRenderer = new HtmlRenderer(this.app, this);
-        const { html } = await htmlRenderer.render(view.data);
+        const { html, hasYouTubeEmbeds } = await htmlRenderer.render(view.data, {
+          sourcePath: view.file?.path ?? '/',
+          settings: this.settings,
+        });
 
-        const wrappedHtml = `<!doctype html>
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${view.file?.name} | Exported</title>
-    <style>
-      ${css}
-      ${customCss}
-    </style>
-  </head>
-  <body class="markdown-body">
-    ${html}
-  </body>
-</html>`;
-
+        const wrappedHtml = this.wrapHtml(html, view.file?.name, hasYouTubeEmbeds);
         const filename = `${view.file?.basename ?? 'markdown'}.html`;
 
         // Mobile WebViews cannot trigger a browser download, so save the file
@@ -87,5 +87,35 @@ export default class ExportToHtmlPlugin extends Plugin {
         downloadBlob(blob, filename);
       }
     });
+  }
+
+  async loadSettings () {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+
+  async saveSettings () {
+    await this.saveData(this.settings);
+  }
+
+  private wrapHtml (html: string, noteName: string | undefined, hasYouTubeEmbeds: boolean): string {
+    const lazyLoadScript = this.settings.lazyLoadYouTube && hasYouTubeEmbeds
+      ? `<script>\n${YOUTUBE_LAZY_LOAD_SCRIPT}\n</script>`
+      : '';
+
+    return `<!doctype html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${noteName} | Exported</title>
+    <style>
+      ${css}
+      ${customCss}
+    </style>
+  </head>
+  <body class="markdown-body">
+    ${html}
+    ${lazyLoadScript}
+  </body>
+</html>`;
   }
 }
